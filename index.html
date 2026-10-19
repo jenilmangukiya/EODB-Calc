@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EODB Rank Calculator</title>
+<style>
+:root{--navy:#0b2447;--navy2:#13335f;--coral:#ff6b5e;--white:#fff;--muted:#b9c6dd;--page:#eef2f8;--ok:#5fd4a0;--mid:#ffd166;--bad:#ff8a7e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#07162d}}
+:root[data-theme="dark"]{--page:#07162d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--page);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:16px}
+
+/* ===== EMBED START (copy from here into ClickFunnels) ===== */
+#eodb{max-width:520px;margin:0 auto;background:var(--navy);color:var(--white);border-radius:14px;padding:24px;box-sizing:border-box;line-height:1.45}
+#eodb *{box-sizing:border-box}
+#eodb h2{margin:0 0 4px;font-size:1.4rem}
+#eodb .sub{margin:0 0 20px;color:var(--muted);font-size:.92rem}
+#eodb label{display:block;font-weight:600;font-size:.95rem;margin:16px 0 4px}
+#eodb .hint{display:block;font-weight:400;font-size:.8rem;color:var(--muted)}
+#eodb select,#eodb input{width:100%;padding:12px;font-size:1rem;border-radius:8px;border:2px solid var(--navy2);background:var(--white);color:#0b2447}
+#eodb select:focus,#eodb input:focus,#eodb button:focus-visible{outline:3px solid var(--coral);outline-offset:1px}
+#eodb .err{color:var(--bad);font-size:.82rem;min-height:1.1em;margin-top:3px}
+#eodb button.go{width:100%;margin-top:20px;padding:14px;font-size:1.05rem;font-weight:700;background:var(--coral);color:#fff;border:0;border-radius:8px;cursor:pointer}
+#eodb button.go:hover{filter:brightness(1.08)}
+#eodb .result{margin-top:20px;padding:18px;border-radius:10px;background:var(--navy2);border-left:6px solid var(--coral)}
+#eodb .result[hidden]{display:none}
+#eodb .rank{font-size:2.4rem;font-weight:800;line-height:1.1}
+#eodb .rank small{display:block;font-size:.85rem;font-weight:500;color:var(--muted)}
+#eodb .badge{display:inline-block;margin-top:10px;padding:5px 12px;border-radius:999px;font-weight:700;font-size:.9rem;color:#0b2447}
+#eodb .note{margin:14px 0 0;font-size:.78rem;color:var(--muted)}
+#eodb .demo{background:none;border:0;color:var(--muted);text-decoration:underline;font-size:.8rem;cursor:pointer;margin-top:12px;padding:0}
+@media (max-width:420px){#eodb{padding:18px}#eodb .rank{font-size:2rem}}
+</style>
+</head>
+<body>
+
+<div id="eodb">
+  <h2>EODB Rank Calculator</h2>
+  <p class="sub">Estimate a country’s Ease of Doing Business rank. A lower rank is better.</p>
+
+  <form id="eodb-form" novalidate>
+    <label for="eodb-income">Income group</label>
+    <select id="eodb-income">
+      <option value="">Select income group</option>
+      <option value="1">1 – High income</option>
+      <option value="2">2 – Upper-middle income</option>
+      <option value="3">3 – Lower-middle income</option>
+      <option value="4">4 – Low income</option>
+    </select>
+    <div class="err" data-for="eodb-income"></div>
+
+    <label for="eodb-days">Days required to obtain business permits and licenses<span class="hint">Number of days, 0 or more</span></label>
+    <input id="eodb-days" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 30">
+    <div class="err" data-for="eodb-days"></div>
+
+    <label for="eodb-bank">Firms using banks to finance investment (%)<span class="hint">0 to 100</span></label>
+    <input id="eodb-bank" type="number" inputmode="decimal" min="0" max="100" step="any" placeholder="e.g. 50">
+    <div class="err" data-for="eodb-bank"></div>
+
+    <label for="eodb-outage">Sales lost to power outages (%)<span class="hint">0 to 100</span></label>
+    <input id="eodb-outage" type="number" inputmode="decimal" min="0" max="100" step="any" placeholder="e.g. 5">
+    <div class="err" data-for="eodb-outage"></div>
+
+    <button type="submit" class="go">Calculate</button>
+  </form>
+
+  <div class="result" id="eodb-result" hidden aria-live="polite">
+    <div class="rank"><span id="eodb-rank">–</span><small>Estimated EODB rank</small></div>
+    <span class="badge" id="eodb-badge"></span>
+    <p class="note">This is an estimate from a simplified four-variable model by Ina Ortiz (2014), inspired by the World Bank’s Doing Business framework. It is not an official World Bank score.</p>
+  </div>
+
+  <button type="button" class="demo" id="eodb-fill">Fill test case (demo only, delete before launch)</button>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var fields={income:{el:$("eodb-income"),min:1,max:4,name:"Select an income group."},
+              days:{el:$("eodb-days"),min:0,max:Infinity,name:"Enter 0 or more days."},
+              bank:{el:$("eodb-bank"),min:0,max:100,name:"Enter a number from 0 to 100."},
+              outage:{el:$("eodb-outage"),min:0,max:100,name:"Enter a number from 0 to 100."}};
+
+  // Cut-offs for the label (client did not specify these; easy to change)
+  var STRONG_MAX=50, AVERAGE_MAX=100;
+
+  function calc(income,bank,outage,days){
+    return 35.187 + (11.284*income) - (0.676*bank) + (1.593*outage) + (0.181*days);
+  }
+
+  $("eodb-form").addEventListener("submit",function(e){
+    e.preventDefault();
+    var v={},ok=true;
+    for(var k in fields){
+      var f=fields[k],raw=f.el.value.trim(),n=Number(raw),msg=$("eodb-form").querySelector('[data-for="'+f.el.id+'"]');
+      if(raw===""||isNaN(n)||n<f.min||n>f.max){msg.textContent=f.name;ok=false}else{msg.textContent="";v[k]=n}
+    }
+    if(!ok){$("eodb-result").hidden=true;return}
+    var rank=calc(v.income,v.bank,v.outage,v.days);
+    var label,color;
+    if(rank<=STRONG_MAX){label="Strong estimate relative to typical EODB rankings";color="var(--ok)"}
+    else if(rank<=AVERAGE_MAX){label="Average estimate relative to typical EODB rankings";color="var(--mid)"}
+    else{label="Weak estimate relative to typical EODB rankings";color="var(--bad)"}
+    $("eodb-rank").textContent=rank.toFixed(3);
+    var b=$("eodb-badge");b.textContent=label;b.style.background=color;
+    $("eodb-result").hidden=false;
+  });
+
+  $("eodb-fill").addEventListener("click",function(){
+    fields.income.el.value="4";fields.days.el.value="30";fields.bank.el.value="50";fields.outage.el.value="5";
+  });
+})();
+</script>
+<!-- ===== EMBED END ===== -->
+</body>
+</html>
